@@ -12,7 +12,7 @@
 
 // F = void(buffin*, buffout*, buffin_size, buffout_size) F have to be thread-safe
 
-template<typename F, size_t max_buff_size = 65536, size_t max_threads_count = 16>
+template<typename F, size_t max_buff_size = 65536*4, size_t max_threads_count = 16>
 class crypto_test {
 public:
     crypto_test(F fun, std::string file_name);
@@ -81,6 +81,7 @@ void crypto_test<F, max_buff_size, max_threads_count>::test_buffer_size(std::fun
 				std::unique_lock<std::mutex> lg(thread_mutex);
 				threads_started = true;
 			}
+			auto start_point = std::chrono::steady_clock::now();
 			trigger_cv.notify_all();
 
 
@@ -88,9 +89,14 @@ void crypto_test<F, max_buff_size, max_threads_count>::test_buffer_size(std::fun
             {
                 threads.at(j).join();
             }
+			auto stop_point = std::chrono::steady_clock::now();
 			threads_started = false;
-            size_t time_ms = std::accumulate(thread_results.begin(), thread_results.end(), 0);
-            m_file << i << '\t' << threads_count+1 << '\t' << (time_ms/static_cast<double>(iterations))/((threads_count+1)*(threads_count+1))<< '\n'; // buff_size threads_count time_ms
+
+            size_t time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(stop_point - start_point).count();
+            // buff_size threads_count time_ms
+            m_file << i << '\t' << threads_count << '\t' << time_ms/static_cast<double>(iterations*(threads_count+1)) << '\n';
+
+//            m_file << i << '\t' << threads_count+1 << '\t' << (time_ms/static_cast<double>(iterations))/((threads_count+1)*(threads_count+1))<< '\n'; // buff_size threads_count time_ms
             // threads_count+1 becouse array index starts from 0
 
         }
