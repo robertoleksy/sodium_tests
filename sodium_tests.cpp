@@ -11,6 +11,7 @@
 #include <mutex>
 #include <cassert>
 #include <numeric>
+#include "affinity.hpp"
 
 void escape(void* p) {
   asm volatile("" : : "g"(p) : "memory");
@@ -18,7 +19,7 @@ void escape(void* p) {
 
 // F = void(buffin*, buffout*, buffin_size, buffout_size) F have to be thread-safe
 
-template<typename F, size_t max_buff_size = 65536, size_t max_threads_count = 16>
+template<typename F, size_t max_buff_size = 2*65536, size_t max_threads_count = 16>
 class crypto_test {
 public:
     crypto_test(F fun, std::string file_name);
@@ -44,14 +45,16 @@ void crypto_test<F, max_buff_size, max_threads_count>::test_buffer_size(std::fun
 	std::condition_variable trigger_cv; // if notifyed all threads starts
 	std::mutex thread_mutex;
 	bool threads_started = false; // protected by thread_mutex
-    constexpr size_t iterations = 20000;
+    constexpr size_t iterations = 50000;
+	const size_t number_of_cpu = std::thread::hardware_concurrency();
 
-    auto thread_lambda = [&init_buffer_lambda, &thread_results, &iterations, this, &thread_cv, &thread_mutex, &threads_started, &trigger_cv, &thread_ready_flag]
+    auto thread_lambda = [&init_buffer_lambda, &thread_results, &iterations, this, &thread_cv, &thread_mutex, &threads_started, &trigger_cv, &thread_ready_flag, &number_of_cpu]
 	(size_t buff_size, size_t thread_index, size_t number_of_concurrent_threads) {
 		assert(number_of_concurrent_threads > 0);
         std::vector<unsigned char> inbuff(buff_size);
         std::vector<unsigned char> outbuff(buff_size);
         init_buffer_lambda(inbuff.data(), outbuff.data(), buff_size, buff_size);
+		stdplus::affinity::set_current_thread_affinity(thread_index % number_of_cpu); // pin to cpu core
 {
 		std::unique_lock<std::mutex> lg(thread_mutex);
 		thread_ready_flag.at(thread_index) = true;
